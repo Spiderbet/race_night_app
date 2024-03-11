@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:senraise_printer/senraise_printer.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 void main() {
   runApp(MyApp());
@@ -8,6 +12,9 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      theme: ThemeData(
+        fontFamily: GoogleFonts.poppins().fontFamily
+      ),
       home: BettingApp(),
     );
   }
@@ -19,6 +26,10 @@ class BettingApp extends StatefulWidget {
 }
 
 class _BettingAppState extends State<BettingApp> {
+  final _senraisePrinterPlugin = SenraisePrinter();
+
+  double get _totalAfterCharity => _total * (1 - _charityTakeout / 100);
+
   List<int> _counts = List.generate(8, (index) => 0);
   List<String> _horseNames = List.generate(8, (index) => 'Horse ${index + 1}');
   double _charityTakeout = 20.0;
@@ -27,7 +38,7 @@ class _BettingAppState extends State<BettingApp> {
   int _selectedRaceNumber = 1;
   final List<int> _raceNumbers = List.generate(10, (index) => index + 1);
 
-  // Define horse button color specifications
+  // Define horse button color specifications explicitly here
   final List<Color> _towelColors = [
     Colors.red,
     Colors.white,
@@ -50,10 +61,23 @@ class _BettingAppState extends State<BettingApp> {
     Colors.black,
   ];
 
+  // Getter to calculate total bets
+  int get _total => _counts.reduce((value, element) => value + element);
+
+  // Getter to calculate total for charity
+  double get _totalForCharity => _total * (_charityTakeout / 100);
+
+  final List<List<String>> _raceHorseNames = [
+    ["Mr. Piglet", "Swifty Sow", "Hog Wild", "Porcine Lightning", "Mudslide Maverick", "Squeal of Fortune", "Hammin' It Up", "Oinker Express"],
+    ["Bacon Bolt", "Snout Runner", "Puddle Jumper", "Piggy Banker", "Razorback Rocket", "Curly Tail Comet", "Truffle Hunter", "Pork Chop Sprinter"],
+    ["Sloppy Joe", "Muddy Buddy", "Trotter Trot", "Snout So Fast", "Greased Lightning", "Piglet's Dream", "Ham Solo", "Brisket Breaker"],
+  ];
+
   @override
   void initState() {
     super.initState();
     _nameControllers = List.generate(8, (index) => TextEditingController(text: _horseNames[index]));
+    updateHorseNamesForSelectedRace();
   }
 
   @override
@@ -65,14 +89,53 @@ class _BettingAppState extends State<BettingApp> {
     super.dispose();
   }
 
-  int get _total => _counts.reduce((value, element) => value + element);
-  double get _totalAfterCharity => _total * (1 - _charityTakeout / 100);
-  double get _totalForCharity => _total * (_charityTakeout / 100);
+  void updateHorseNamesForSelectedRace() {
+    setState(() {
+      _horseNames = List.generate(8, (index) => "${index + 1}. ${_raceHorseNames[_selectedRaceNumber - 1][index]}");
+    });
+  }
 
-  void _incrementCounter(int horseNumber) {
+  void _incrementCounter(int horseNumber) async {
     setState(() {
       _counts[horseNumber - 1]++;
     });
+
+    // Prepare receipt text
+    String receiptText = "\n\nRace #$_selectedRaceNumber\n\n"
+        "${_horseNames[horseNumber - 1]}";
+
+    // Attempt to print the receipt
+    try {
+      await _senraisePrinterPlugin.setAlignment(1);
+
+      Uint8List data = (await rootBundle.load('images/img.png'))
+          .buffer
+          .asUint8List();
+      await _senraisePrinterPlugin.printPic(data);
+      await _senraisePrinterPlugin.setTextBold(true);
+      await _senraisePrinterPlugin.setTextSize(40);
+      await _senraisePrinterPlugin.printText(receiptText);
+      await _senraisePrinterPlugin.setTextSize(20);
+      await _senraisePrinterPlugin.printText("\n\nBet Placed: " + DateTime.now().toLocal().toString());
+      await _senraisePrinterPlugin.printBarCode("${_horseNames[horseNumber - 1]}", 1, 60, 200);
+      await _senraisePrinterPlugin.printText("\n\n\n\n\n");
+    } catch (e) {
+      print("Error printing receipt: $e");
+    }
+  }
+
+  Future<Uint8List?> resizeImage(String path, int targetWidth) async {
+    final Uint8List originalImageData = (await rootBundle.load(path)).buffer.asUint8List();
+
+    final Uint8List? compressedImageData = await FlutterImageCompress.compressWithList(
+      originalImageData,
+      minWidth: targetWidth,
+      quality: 95, // Adjust the quality as needed
+      // Keep the aspect ratio:
+      keepExif: true,
+    );
+
+    return compressedImageData;
   }
 
   double _calculateDividend(int horseNumber) {
@@ -128,15 +191,55 @@ class _BettingAppState extends State<BettingApp> {
     );
   }
 
-  @override
+  void _showRaceSelectionDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Select Race'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [1, 2, 3].map((raceNumber) => ListTile(
+              title: Text('Race $raceNumber'),
+              onTap: () {
+                setState(() {
+                  _selectedRaceNumber = raceNumber;
+                  _counts = List.generate(8, (index) => 0);
+                  updateHorseNamesForSelectedRace();
+                });
+                Navigator.of(context).pop();
+              },
+            )).toList(),
+          ),
+        );
+      },
+    );
+  }
+
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Race Night Betting - Race $_selectedRaceNumber'),
+        toolbarHeight: 120,
+        backgroundColor: Colors.black,
+        // Remove the leading property if you previously added a logo there
+        title: Container(
+          height: 80, // Use the AppBar's standard height to guide the logo's size
+          child: Image.asset(
+            'images/img_logo.png',
+            fit: BoxFit.contain, // This ensures the whole logo is visible and scaled correctly
+          ),
+        ),
+        centerTitle: true, // Center the logo
         actions: [
           IconButton(
             icon: Icon(Icons.settings),
+            color: Colors.white,
             onPressed: _openRaceSettings,
+          ),
+          IconButton(
+            icon: Icon(Icons.flash_on),
+            color: Colors.white,
+            onPressed: _showRaceSelectionDialog, // Your onPressed logic
           ),
         ],
       ),
@@ -144,35 +247,41 @@ class _BettingAppState extends State<BettingApp> {
         children: [
           Padding(
             padding: EdgeInsets.all(8.0),
-            child: DropdownButtonFormField<int>(
-              decoration: InputDecoration(
-                labelText: 'Select Race Number',
-                border: OutlineInputBorder(),
-              ),
-              value: _selectedRaceNumber,
-              items: _raceNumbers.map<DropdownMenuItem<int>>((int value) {
-                return DropdownMenuItem<int>(
-                  value: value,
-                  child: Text(value.toString()),
-                );
-              }).toList(),
-              onChanged: (int? newValue) {
-                setState(() {
-                  _selectedRaceNumber = newValue!;
-                });
-              },
-            ),
-          ),
-          Padding(
-            padding: EdgeInsets.all(8.0),
-            child: TextField(
-              controller: _controller,
-              decoration: InputDecoration(
-                labelText: 'Charity Takeout Percentage',
-                border: OutlineInputBorder(),
-              ),
-              keyboardType: TextInputType.number,
-              onChanged: (value) => _updateCharityTakeout(value),
+            child: Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<int>(
+                    decoration: InputDecoration(
+                      labelText: 'Select Race Number',
+                      border: OutlineInputBorder(),
+                    ),
+                    value: _selectedRaceNumber,
+                    items: _raceNumbers.map<DropdownMenuItem<int>>((int value) {
+                      return DropdownMenuItem<int>(
+                        value: value,
+                        child: Text(value.toString()),
+                      );
+                    }).toList(),
+                    onChanged: (int? newValue) {
+                      setState(() {
+                        _selectedRaceNumber = newValue!;
+                      });
+                    },
+                  ),
+                ),
+                SizedBox(width: 8.0), // Spacing between the two widgets
+                Expanded(
+                  child: TextField(
+                    controller: _controller,
+                    decoration: InputDecoration(
+                      labelText: 'Charity Takeout Percentage',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.number,
+                    onChanged: (value) => _updateCharityTakeout(value),
+                  ),
+                ),
+              ],
             ),
           ),
           Padding(
