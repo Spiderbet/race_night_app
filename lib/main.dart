@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:senraise_printer/senraise_printer.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
+import 'package:auto_size_text/auto_size_text.dart';
 
 void main() {
   runApp(MyApp());
@@ -108,6 +110,10 @@ class _BettingAppState extends State<BettingApp> {
     try {
       await _senraisePrinterPlugin.setAlignment(1);
 
+      DateTime now = DateTime.now();
+      DateFormat formatter = DateFormat('yyyy-MM-dd HH:mm:ss');
+      String formattedDate = formatter.format(now);
+
       Uint8List data = (await rootBundle.load('images/img.png'))
           .buffer
           .asUint8List();
@@ -115,10 +121,8 @@ class _BettingAppState extends State<BettingApp> {
       await _senraisePrinterPlugin.setTextBold(true);
       await _senraisePrinterPlugin.setTextSize(40);
       await _senraisePrinterPlugin.printText(receiptText);
-      await _senraisePrinterPlugin.setTextSize(20);
-      await _senraisePrinterPlugin.printText("\n\nBet Placed: " + DateTime.now().toLocal().toString());
-      await _senraisePrinterPlugin.printBarCode("${_horseNames[horseNumber - 1]}", 1, 60, 200);
-      await _senraisePrinterPlugin.printText("\n\n\n\n\n");
+      await _senraisePrinterPlugin.setTextSize(24);
+      await _senraisePrinterPlugin.printText("\n\nPlaced: ${formattedDate}\n\n\n\n");
     } catch (e) {
       print("Error printing receipt: $e");
     }
@@ -309,10 +313,11 @@ class _BettingAppState extends State<BettingApp> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Expanded(
-                            child: Text('${_horseNames[index]}', style: TextStyle(fontSize: 24, color: _numberColors[index])),
+                            child: AutoSizeText('${_horseNames[index]}', style: TextStyle(fontSize: 28, color: _numberColors[index]), maxLines: 1),
                           ),
                           Container(
                             padding: EdgeInsets.all(10.0),
+                            margin: EdgeInsets.fromLTRB(20.0, 0, 0, 0),
                             color: Colors.black, // For visibility, use a neutral background in the right column
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.end,
