@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:race_night_app/participant_ui/admin_screen.dart';
+import 'package:race_night_app/participant_ui/manage_races_screen.dart';
+import 'package:race_night_app/participant_ui/manage_users_screen.dart';
 import 'package:senraise_printer/senraise_printer.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:auto_size_text/auto_size_text.dart';
 
+import 'participant_ui/scan_nfc_screen.dart';
+import 'participant_ui/place_bet_screen.dart';
+import 'participant_ui/confirm_bet_screen.dart';
 void main() {
   runApp(MyApp());
 }
@@ -14,13 +20,31 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      theme: ThemeData(
-        fontFamily: GoogleFonts.poppins().fontFamily
-      ),
-      home: BettingApp(),
+      theme: ThemeData(fontFamily: 'Poppins'),
+      initialRoute: '/',
+      routes: {
+        '/': (context) => ScanNfcScreen(),
+        '/placeBet': (context) {
+          final nfcId = ModalRoute.of(context)?.settings.arguments as String;
+          return PlaceBetScreen(nfcId: nfcId);
+        },
+        '/manageUsers': (context) => ManageUsersScreen(),
+        '/admin': (context) => const AdminScreen(),
+        '/manageRaces': (context) => ManageRacesScreen(),
+        '/confirmBet': (context) {
+          final arguments =
+          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>;
+          return ConfirmBetScreen(
+            runner: arguments['runner'] as String,
+            nfcId: arguments['nfcId'] as String,
+            raceNumber: arguments['raceNumber'] as int,
+          );
+        },
+      },
     );
   }
 }
+
 
 class BettingApp extends StatefulWidget {
   @override
